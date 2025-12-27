@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>淑菁AI活動創作區 - 認知復健產生器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f3f4f6; margin: 0; padding: 0; }
+        
+        /* 創作區背景: 活潑晨曦黃漸層 */
+        .config-panel { 
+            height: 100vh; 
+            overflow-y: auto; 
+            scrollbar-width: thin; 
+            background: linear-gradient(180deg, #fef9c3 0%, #fef3c7 100%);
+            border-right: 2px solid #fde68a;
+        }
+        
+        /* A4 預覽規格 */
+        .a4-page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm; /* 1.5cm Margin */
+            margin: 20px auto;
+            background: white;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            position: relative;
+            box-sizing: border-box;
+            color: black;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 預覽容器背景: 活潑蜜桃粉波點 */
+        .preview-container {
+            background-color: #fce7f3;
+            background-image: radial-gradient(#f9a8d4 0.8px, transparent 0.8px);
+            background-size: 15px 15px;
+            padding: 40px 20px;
+            overflow-x: auto;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* 手機瀏覽縮放 */
+        @media (max-width: 1024px) {
+            .a4-page { transform: scale(0.6); transform-origin: top center; margin-bottom: -110mm; }
+        }
+        @media (max-width: 640px) {
+            .a4-page { transform: scale(0.35); transform-origin: top center; margin-bottom: -185mm; }
+        }
+
+        /* 數學方框設計 */
+        .math-input-box {
+            display: inline-block;
+            border: 2px solid #000;
+            text-align: center;
+            vertical-align: middle;
+            margin: 0 8px;
+            font-weight: bold;
+        }
+
+        /* 數獨格子設計 */
+        .sudoku-grid { border: 2.5px solid #000; display: grid; background: #fff; }
+        .sudoku-cell { border: 0.5px solid #999; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .border-thick-r { border-right: 2.5px solid #000; }
+        .border-thick-b { border-bottom: 2.5px solid #000; }
+
+        /* 分類色彩導覽 (高對比 - 無白色文字) */
+        .nav-btn {
+            border-radius: 12px;
+            margin: 6px 16px;
+            padding: 14px 20px;
+            font-weight: 700;
+            transition: all 0.3s ease;
+            text-align: left;
+            border: 2px solid #fde68a;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background-color: rgba(255, 255, 255, 0.4);
+        }
+
+        /* 數獨選中: 淺藍底深藍字 */
+        .nav-sudoku-active { 
+            background-color: #bfdbfe !important; 
+            color: #1e3a8a !important; 
+            border-color: #3b82f6 !important;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+        }
+        /* 數學選中: 淺綠底深綠字 */
+        .nav-math-active { 
+            background-color: #bbf7d0 !important; 
+            color: #064e3b !important; 
+            border-color: #10b981 !important;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+        }
+        /* 應用選中: 淺橘底深褐字 */
+        .nav-word-active { 
+            background-color: #fef3c7 !important; 
+            color: #78350f !important; 
+            border-color: #f59e0b !important;
+            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);
+        }
+
+        .nav-inactive { color: #92400e; }
+        .nav-inactive:hover { background-color: rgba(255, 255, 255, 0.7); }
+
+        .btn-icon { font-size: 1.25rem; }
+        
+        /* Scrollbar 樣式 */
+        .config-panel::-webkit-scrollbar { width: 6px; }
+        .config-panel::-webkit-scrollbar-thumb { background: #fde68a; border-radius: 10px; }
+    </style>
+</head>
+<body class="flex flex-col md:flex-row h-screen overflow-hidden">
+
+    <!-- 左側設定區 (創作區) -->
+    <div class="w-full md:w-80 shadow-2xl z-20 config-panel flex flex-col">
+        <div class="p-6 bg-amber-900/10 border-b border-amber-200">
+            <h1 class="text-xl font-bold text-amber-900">淑菁AI活動創作區</h1>
+            <p class="text-xs text-amber-800 opacity-80 mt-1">失智症個案管理師 吳淑菁 設計</p>
+        </div>
+
+        <nav class="flex flex-col py-4 space-y-1">
+            <button onclick="setTab('sudoku')" id="tab-sudoku" class="nav-btn nav-sudoku-active">
+                <span class="btn-icon">🧩</span> 數獨題目
+            </button>
+            <button onclick="setTab('math')" id="tab-math" class="nav-btn nav-inactive">
+                <span class="btn-icon">🧮</span> 數學計算
+            </button>
+            <button onclick="setTab('word')" id="tab-word" class="nav-btn nav-inactive">
+                <span class="btn-icon">📝</span> 應用題目
+            </button>
+        </nav>
+
+        <div class="p-6 space-y-6 flex-grow">
+            <!-- 共通設定 -->
+            <div class="space-y-4">
+                <h3 class="text-sm font-bold text-amber-900/50 uppercase tracking-wider">頁面基礎設定</h3>
+                <div>
+                    <label class="block text-xs font-bold text-amber-900 mb-1">自訂標題 (單位名稱)</label>
+                    <input type="text" id="ui-title" value="新店耕莘醫院失智共照中心" oninput="updatePreview()" class="w-full border-2 border-amber-200 bg-white/50 rounded-md p-2 text-sm focus:border-amber-400 outline-none text-amber-950">
+                </div>
+                <div class="flex gap-2">
+                    <div class="flex-1">
+                        <label class="block text-xs font-bold text-amber-900 mb-1">標題大小 (<span id="title-size-label">24</span>px)</label>
+                        <input type="range" id="ui-title-size" min="18" max="28" value="24" oninput="updateTitleSizeLabel(this.value)" class="w-full accent-amber-600">
+                    </div>
+                    <div class="w-20">
+                        <label class="block text-xs font-bold text-amber-900 mb-1">份數</label>
+                        <input type="number" id="ui-copies" value="1" min="1" max="10" class="w-full border-2 border-amber-200 bg-white/50 rounded-md p-2 text-sm text-amber-950">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-amber-900 mb-1">上傳單位 Logo</label>
+                    <input type="file" id="ui-logo" accept="image/*" onchange="loadLogo(this)" class="w-full text-xs text-amber-900">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-amber-900 mb-1">答案產出設定</label>
+                    <select id="ui-ans-mode" onchange="updatePreview()" class="w-full border-2 border-amber-200 bg-white/50 rounded-md p-2 text-sm text-amber-950">
+                        <option value="none">不產生答案卷</option>
+                        <option value="next">答案附於題目下頁</option>
+                        <option value="last">答案統一於最後頁</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 數獨設定 -->
+            <div id="cfg-sudoku" class="space-y-4 border-t border-amber-200 pt-4">
+                <h3 class="text-sm font-bold text-blue-800 uppercase tracking-wider">🧩 數獨偏好設定</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-blue-900 mb-1">尺寸</label>
+                        <select id="sudoku-size" onchange="syncSudokuPerPage(); updatePreview();" class="w-full border-2 border-blue-200 bg-white/50 rounded-md p-2 text-sm text-blue-950">
+                            <option value="4">4x4</option>
+                            <option value="6">6x6</option>
+                            <option value="9" selected>9x9</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-blue-900 mb-1">每頁題數</label>
+                        <select id="sudoku-per-page" onchange="updatePreview()" class="w-full border-2 border-blue-200 bg-white/50 rounded-md p-2 text-sm text-blue-950"></select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-blue-900 mb-1">難易度</label>
+                    <select id="sudoku-diff" onchange="updatePreview()" class="w-full border-2 border-blue-200 bg-white/50 rounded-md p-2 text-sm text-blue-950">
+                        <option value="0.25">新手</option>
+                        <option value="0.4">簡單</option>
+                        <option value="0.55" selected>中等</option>
+                        <option value="0.7">高手</option>
+                        <option value="0.8">困難</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 數學設定 -->
+            <div id="cfg-math" class="hidden space-y-4 border-t border-amber-200 pt-4">
+                <h3 class="text-sm font-bold text-green-800 uppercase tracking-wider">🧮 數學計算設定</h3>
+                <div>
+                    <label class="block text-xs font-bold text-green-900 mb-2">運算符號 (可複選)</label>
+                    <div class="flex flex-wrap gap-3">
+                        <label class="flex items-center text-sm text-green-950"><input type="checkbox" class="math-op" value="+" checked onchange="updatePreview()"> 加</label>
+                        <label class="flex items-center text-sm text-green-950"><input type="checkbox" class="math-op" value="-" onchange="updatePreview()"> 減</label>
+                        <label class="flex items-center text-sm text-green-950"><input type="checkbox" class="math-op" value="*" onchange="updatePreview()"> 乘</label>
+                        <label class="flex items-center text-sm text-green-950"><input type="checkbox" class="math-op" value="/" onchange="updatePreview()"> 除</label>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-green-900 mb-1">難度</label>
+                        <select id="math-diff" onchange="updatePreview()" class="w-full border-2 border-green-200 bg-white/50 rounded-md p-2 text-sm text-green-950">
+                            <option value="10">簡單 (十位)</option>
+                            <option value="500">簡單 (1-500)</option>
+                            <option value="1000" selected>中等 (百位)</option>
+                            <option value="9999">困難 (千位)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-green-900 mb-1">每頁題數</label>
+                        <select id="math-per-page" onchange="updatePreview()" class="w-full border-2 border-green-200 bg-white/50 rounded-md p-2 text-sm text-green-950">
+                            <option value="16">16 題 (大間距)</option>
+                            <option value="20" selected>20 題</option>
+                            <option value="24">24 題</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 應用題設定 -->
+            <div id="cfg-word" class="hidden space-y-4 border-t border-amber-200 pt-4">
+                <h3 class="text-sm font-bold text-amber-800 uppercase tracking-wider">📝 應用題偏好設定</h3>
+                <div>
+                    <label class="block text-xs font-bold text-amber-900 mb-2">運算類型</label>
+                    <div class="flex flex-wrap gap-3">
+                        <label class="flex items-center text-sm text-amber-950"><input type="checkbox" class="word-op" value="+" checked onchange="updatePreview()"> 加法</label>
+                        <label class="flex items-center text-sm text-amber-950"><input type="checkbox" class="word-op" value="-" onchange="updatePreview()"> 減法</label>
+                        <label class="flex items-center text-sm text-amber-950"><input type="checkbox" class="word-op" value="*" onchange="updatePreview()"> 乘法</label>
+                        <label class="flex items-center text-sm text-amber-950"><input type="checkbox" class="word-op" value="/" onchange="updatePreview()"> 除法</label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-amber-900 mb-1">題目難易度</label>
+                    <select id="word-diff" onchange="updatePreview()" class="w-full border-2 border-amber-300 bg-white/50 rounded-md p-2 text-sm text-amber-950">
+                        <option value="easy">簡單 (基礎生活運算)</option>
+                        <option value="medium" selected>中等 (複合情境)</option>
+                        <option value="hard">困難 (多步驟邏輯)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6 bg-amber-950/5 border-t border-amber-200 space-y-3">
+            <button onclick="refreshData()" id="refresh-btn" class="w-full py-3 bg-blue-700 text-blue-50 rounded-lg font-bold hover:opacity-90 shadow-md transition">重新隨機出題</button>
+            <button onclick="exportToPDF()" class="w-full py-3 bg-slate-800 text-slate-100 rounded-lg font-bold hover:bg-slate-700 shadow-md flex items-center justify-center gap-2 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                下載列印 PDF
+            </button>
+        </div>
+    </div>
+
+    <!-- 右側預覽區 (列印背景) -->
+    <main class="preview-container">
+        <div id="render-target"></div>
+    </main>
+
+    <script>
+        let activeTab = 'sudoku';
+        let logoBase64 = null;
+        let pageData = [];
+
+        function setTab(tab) {
+            activeTab = tab;
+            document.getElementById('cfg-sudoku').classList.toggle('hidden', tab !== 'sudoku');
+            document.getElementById('cfg-math').classList.toggle('hidden', tab !== 'math');
+            document.getElementById('cfg-word').classList.toggle('hidden', tab !== 'word');
+            
+            const sBtn = document.getElementById('tab-sudoku');
+            const mBtn = document.getElementById('tab-math');
+            const wBtn = document.getElementById('tab-word');
+            const refreshBtn = document.getElementById('refresh-btn');
+            
+            // 重置樣式
+            [sBtn, mBtn, wBtn].forEach(btn => btn.className = "nav-btn nav-inactive");
+            
+            // 設置啟動樣式
+            if (tab === 'sudoku') {
+                sBtn.className = "nav-btn nav-sudoku-active";
+                refreshBtn.style.backgroundColor = "#1d4ed8"; // 深藍
+                refreshBtn.style.color = "#eff6ff";
+            } else if (tab === 'math') {
+                mBtn.className = "nav-btn nav-math-active";
+                refreshBtn.style.backgroundColor = "#047857"; // 深綠
+                refreshBtn.style.color = "#ecfdf5";
+            } else {
+                wBtn.className = "nav-btn nav-word-active";
+                refreshBtn.style.backgroundColor = "#b45309"; // 深橘
+                refreshBtn.style.color = "#fffbeb";
+            }
+            
+            syncSudokuPerPage();
+            refreshData();
+        }
+
+        function updateTitleSizeLabel(val) {
+            document.getElementById('title-size-label').innerText = val;
+            updatePreview();
+        }
+
+        function loadLogo(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (e) => { logoBase64 = e.target.result; updatePreview(); };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function syncSudokuPerPage() {
+            const size = document.getElementById('sudoku-size').value;
+            const select = document.getElementById('sudoku-per-page');
+            const oldVal = select.value;
+            select.innerHTML = '';
+            
+            const options = {
+                '4': [{v:8, t:'8 題/頁'}, {v:6, t:'6 題/頁'}, {v:4, t:'4 題/頁'}],
+                '6': [{v:6, t:'6 題/頁'}, {v:4, t:'4 題/頁'}, {v:2, t:'2 題/頁'}],
+                '9': [{v:4, t:'4 題/頁'}, {v:2, t:'2 題/頁'}]
+            };
+            
+            options[size].forEach(opt => {
+                const el = document.createElement('option'); el.value = opt.v; el.innerText = opt.t;
+                select.appendChild(el);
+            });
+            if (!oldVal || !Array.from(select.options).some(o => o.value == oldVal)) select.selectedIndex = 0;
+        }
+
+        // --- Core Math Generation ---
+        function generateMathProblem() {
+            const ops = Array.from(document.querySelectorAll('.math-op:checked')).map(el => el.value);
+            if (ops.length === 0) ops.push('+');
+            const op = ops[Math.floor(Math.random() * ops.length)];
+            const diff = document.getElementById('math-diff').value;
+            let a, b, res;
+            const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+            if (diff === '10') { a = r(1, 99); b = r(1, 99); }
+            else if (diff === '500') { a = r(1, 500); b = r(1, 500); }
+            else if (diff === '1000') { a = r(100, 1000); b = r(100, 1000); }
+            else { a = r(1000, 9999); b = r(1000, 9999); }
+            if (op === '-') { if (a < b) [a, b] = [b, a]; res = a - b; }
+            else if (op === '*') { a = r(2, 99); b = r(2, 9); res = a * b; }
+            else if (op === '/') { b = r(2, 12); res = r(2, 20); a = b * res; }
+            else { res = a + b; }
+            return { a, b, op: op === '*' ? '×' : (op === '/' ? '÷' : op), res, hide: r(0, 2) };
+        }
+
+        // --- Core Word Problem Generation ---
+        function generateWordProblem() {
+            const ops = Array.from(document.querySelectorAll('.word-op:checked')).map(el => el.value);
+            if (ops.length === 0) ops.push('+');
+            const op = ops[Math.floor(Math.random() * ops.length)];
+            const diff = document.getElementById('word-diff').value;
+            const r = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+            
+            let a, b, res, text;
+            const names = ["小明", "阿雀姨", "王伯伯", "小華", "美英", "志成", "阿忠"];
+            const items = ["蘋果", "雞蛋", "餅乾", "糖果", "包子", "原子筆", "水餃"];
+            const name = names[r(0, names.length-1)];
+            const item = items[r(0, items.length-1)];
+
+            if (op === '+') {
+                a = diff === 'easy' ? r(5, 20) : (diff === 'medium' ? r(20, 100) : r(100, 500));
+                b = diff === 'easy' ? r(5, 20) : (diff === 'medium' ? r(20, 100) : r(100, 500));
+                res = a + b;
+                text = `${name}今天去市場買了 ${a} 個${item}，回到家發現家裡原本就有 ${b} 個，請問現在總共有幾個${item}？`;
+            } else if (op === '-') {
+                a = diff === 'easy' ? r(10, 30) : (diff === 'medium' ? r(50, 200) : r(200, 1000));
+                b = diff === 'easy' ? r(1, 9) : (diff === 'medium' ? r(10, 50) : r(50, 199));
+                res = a - b;
+                text = `${name}帶了 ${a} 元去商店，買了一罐飲料花了 ${b} 元，請問${name}還剩下多少錢？`;
+            } else if (op === '*') {
+                a = diff === 'easy' ? r(2, 5) : (diff === 'medium' ? r(5, 12) : r(12, 50));
+                b = diff === 'easy' ? r(2, 5) : (diff === 'medium' ? r(5, 12) : r(12, 20));
+                res = a * b;
+                text = `商店裡的${item}一包賣 ${a} 元，${name}想買 ${b} 包分給鄰居，請問總共要付多少錢？`;
+            } else {
+                b = diff === 'easy' ? r(2, 5) : (diff === 'medium' ? r(5, 10) : r(10, 20));
+                res = diff === 'easy' ? r(2, 5) : (diff === 'medium' ? r(5, 10) : r(10, 50));
+                a = b * res;
+                text = `${name}有 ${a} 顆${item}，想要平均分給 ${b} 個好朋友，請問每個人可以分到幾顆${item}？`;
+            }
+            return { text, res };
+        }
+
+        // --- Core Sudoku Logic ---
+        function generateSudoku(size, difficulty) {
+            const board = Array.from({length: size}, () => Array(size).fill(0));
+            const subW = size === 6 ? 3 : Math.sqrt(size);
+            const subH = size === 6 ? 2 : Math.sqrt(size);
+            function isValid(r, c, v) {
+                for(let i=0; i<size; i++) if(board[r][i] === v || board[i][c] === v) return false;
+                const sr = Math.floor(r/subH)*subH, sc = Math.floor(c/subW)*subW;
+                for(let i=0; i<subH; i++) for(let j=0; j<subW; j++) if(board[sr+i][sc+j] === v) return false;
+                return true;
+            }
+            function solve() {
+                for(let r=0; r<size; r++) {
+                    for(let c=0; c<size; c++) {
+                        if(board[r][c] === 0) {
+                            const nums = Array.from({length: size}, (_, i) => i+1).sort(() => Math.random() - 0.5);
+                            for(let n of nums) { if(isValid(r, c, n)) { board[r][c] = n; if(solve()) return true; board[r][c] = 0; } }
+                            return false;
+                        }
+                    }
+                } return true;
+            }
+            solve();
+            const solution = JSON.parse(JSON.stringify(board));
+            const puzzle = JSON.parse(JSON.stringify(board));
+            const holes = Math.floor(size * size * difficulty);
+            let count = 0;
+            while(count < holes) {
+                let r = Math.floor(Math.random() * size), c = Math.floor(Math.random() * size);
+                if(puzzle[r][c] !== 0) { puzzle[r][c] = 0; count++; }
+            }
+            return { puzzle, solution, size };
+        }
+
+        function refreshData() {
+            const copies = parseInt(document.getElementById('ui-copies').value) || 1;
+            pageData = [];
+            for(let c=0; c<copies; c++) {
+                if(activeTab === 'sudoku') {
+                    const size = parseInt(document.getElementById('sudoku-size').value);
+                    const perPage = parseInt(document.getElementById('sudoku-per-page').value);
+                    const diff = parseFloat(document.getElementById('sudoku-diff').value);
+                    const problems = [];
+                    for(let i=0; i<perPage; i++) problems.push(generateSudoku(size, diff));
+                    pageData.push(problems);
+                } else if(activeTab === 'math') {
+                    const perPage = parseInt(document.getElementById('math-per-page').value);
+                    const problems = [];
+                    for(let i=0; i<perPage; i++) problems.push(generateMathProblem());
+                    pageData.push(problems);
+                } else {
+                    const problems = [];
+                    for(let i=0; i<6; i++) problems.push(generateWordProblem());
+                    pageData.push(problems);
+                }
+            }
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const target = document.getElementById('render-target'); target.innerHTML = '';
+            const ansMode = document.getElementById('ui-ans-mode').value;
+            pageData.forEach((data, idx) => {
+                target.appendChild(renderPage(data, false, idx + 1));
+                if (ansMode === 'next') target.appendChild(renderPage(data, true, idx + 1));
+            });
+            if (ansMode === 'last') pageData.forEach((data, idx) => target.appendChild(renderPage(data, true, idx + 1)));
+        }
+
+        function renderPage(data, isAnswer, setNum) {
+            const page = document.createElement('div'); page.className = 'a4-page';
+            
+            // Header
+            const header = document.createElement('div'); header.className = 'flex items-center mb-2 h-20 relative';
+            const logoArea = document.createElement('div'); logoArea.style.width = '35mm';
+            if (logoBase64) {
+                const img = document.createElement('img'); img.src = logoBase64; img.className = 'max-w-full max-h-16 object-contain';
+                logoArea.appendChild(img);
+            }
+            const titleArea = document.createElement('div'); titleArea.className = 'flex-1 text-center';
+            const mainTitle = document.createElement('h2'); mainTitle.innerText = document.getElementById('ui-title').value || '認知健腦訓練';
+            mainTitle.style.fontSize = document.getElementById('ui-title-size').value + 'px';
+            mainTitle.className = 'font-bold leading-tight';
+            const subTitle = document.createElement('p'); subTitle.className = 'text-lg text-gray-700 mt-1';
+            let subText = activeTab === 'sudoku' ? '數獨生成器' : (activeTab === 'math' ? '數學產生器' : '應用問題產生器');
+            subTitle.innerText = subText + (isAnswer ? ' (答案卷)' : '');
+            titleArea.appendChild(mainTitle); titleArea.appendChild(subTitle);
+            const spacer = document.createElement('div'); spacer.style.width = '35mm';
+            header.appendChild(logoArea); header.appendChild(titleArea); header.appendChild(spacer);
+            page.appendChild(header);
+
+            // Info Bar
+            const info = document.createElement('div'); info.className = 'flex justify-between border-b-2 border-black pb-1 mb-6 text-sm';
+            info.innerHTML = `<span>第 ${setNum} 份</span> <span>姓名：________________</span> <span>日期：____年____月____日</span>`;
+            page.appendChild(info);
+
+            // Content
+            const content = document.createElement('div'); content.className = 'flex-grow flex flex-col justify-around';
+            if (activeTab === 'sudoku') {
+                const perPage = data.length;
+                let gridClass = perPage > 4 ? 'grid-cols-2' : (perPage === 2 ? 'grid-cols-1' : 'grid-cols-2');
+                const listWrap = document.createElement('div'); listWrap.className = `grid ${gridClass} gap-y-10 gap-x-6 w-full justify-items-center items-center`;
+                data.forEach((item, i) => {
+                    const wrap = document.createElement('div'); wrap.className = 'flex flex-col items-center w-full';
+                    wrap.innerHTML = `<div class="mb-2 self-start font-bold underline">第 ${i+1} 題</div>`;
+                    wrap.appendChild(drawSudokuUI(item, isAnswer, perPage));
+                    listWrap.appendChild(wrap);
+                });
+                content.appendChild(listWrap);
+            } else if (activeTab === 'math') {
+                const perPage = data.length;
+                const mathList = document.createElement('div'); mathList.className = 'grid grid-cols-2 gap-x-12 gap-y-4';
+                if (perPage === 16) mathList.className = 'grid grid-cols-2 gap-x-12 gap-y-12 mt-4';
+                data.forEach((item, i) => mathList.appendChild(drawMathUI(item, i, isAnswer, perPage)));
+                content.appendChild(mathList);
+            } else {
+                // Word Problems
+                const wordList = document.createElement('div'); wordList.className = 'flex flex-col gap-8 mt-4';
+                data.forEach((item, i) => {
+                    const div = document.createElement('div'); div.className = 'text-xl leading-relaxed border-b border-dashed border-gray-300 pb-4';
+                    div.innerHTML = `<div class="font-bold mb-2">題目 ${i+1}：</div> <div>${item.text}</div>`;
+                    const ansRow = document.createElement('div'); ansRow.className = 'mt-4 flex items-center justify-end';
+                    ansRow.innerHTML = `<span class="mr-4">答：</span> <div style="width: 100px; height: 40px; border: 2px solid #000; display: flex; align-items: center; justify-content: center; font-weight: bold; ${isAnswer ? 'color: red;' : ''}">${isAnswer ? item.res : ''}</div> <span class="ml-2"></span>`;
+                    div.appendChild(ansRow);
+                    wordList.appendChild(div);
+                });
+                content.appendChild(wordList);
+            }
+            page.appendChild(content);
+
+            const footer = document.createElement('div'); footer.className = 'mt-4 text-center text-xs text-gray-400';
+            footer.innerText = '設計者：吳淑菁 失智症個案管理師 | 淑菁AI活動創作區';
+            page.appendChild(footer);
+            return page;
+        }
+
+        function drawSudokuUI(item, isAnswer, perPage) {
+            const { puzzle, solution, size } = item;
+            const grid = document.createElement('div'); grid.className = 'sudoku-grid';
+            grid.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+            
+            let mmSize = 0;
+            if (size === 9) mmSize = (perPage === 2) ? 42 : 28;
+            else if (size === 6) mmSize = (perPage === 2) ? 55 : 35;
+            else mmSize = (perPage === 4) ? 60 : 32;
+
+            const subW = size === 6 ? 3 : Math.sqrt(size);
+            const subH = size === 6 ? 2 : Math.sqrt(size);
+            for(let r=0; r<size; r++) {
+                for(let c=0; c<size; c++) {
+                    const cell = document.createElement('div'); cell.className = 'sudoku-cell';
+                    cell.style.width = (mmSize / size * 2.5) + 'mm'; cell.style.height = (mmSize / size * 2.5) + 'mm';
+                    cell.style.fontSize = (mmSize / size * 1.1) + 'mm';
+                    if(c % subW === subW-1 && c !== size-1) cell.classList.add('border-thick-r');
+                    if(r % subH === subH-1 && r !== size-1) cell.classList.add('border-thick-b');
+                    if(puzzle[r][c] !== 0) { cell.innerText = puzzle[r][c]; cell.style.color = 'black'; }
+                    else if(isAnswer) { cell.innerText = solution[r][c]; cell.style.color = 'red'; }
+                    grid.appendChild(cell);
+                }
+            } return grid;
+        }
+
+        function drawMathUI(item, index, isAnswer, perPage) {
+            const div = document.createElement('div');
+            const fontSizeClass = perPage === 16 ? 'text-3xl' : 'text-2xl';
+            div.className = `flex items-center ${fontSizeClass} h-14`;
+            div.innerHTML = `<span class="text-sm text-gray-400 mr-3 w-6">${index+1}.</span>`;
+            const boxStyle = perPage === 16 ? 'width: 80px; height: 60px; line-height: 60px; font-size: 34px;' : 'width: 65px; height: 48px; line-height: 48px; font-size: 28px;';
+            const parts = [item.a, item.op, item.b, '=', item.res];
+            parts.forEach((p, idx) => {
+                const isTarget = (idx === 0 && item.hide === 0) || (idx === 2 && item.hide === 1) || (idx === 4 && item.hide === 2);
+                if (isTarget) {
+                    const box = document.createElement('div'); box.className = 'math-input-box'; box.style = boxStyle;
+                    if (isAnswer) { box.innerText = p; box.style.color = 'red'; }
+                    div.appendChild(box);
+                } else {
+                    const span = document.createElement('span'); span.className = 'mx-1 font-bold'; span.innerText = p;
+                    div.appendChild(span);
+                }
+            }); return div;
+        }
+
+        async function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'mm', 'a4');
+            const pages = document.querySelectorAll('.a4-page');
+            const mask = document.createElement('div');
+            mask.className = 'fixed inset-0 bg-black bg-opacity-70 z-[100] flex items-center justify-center text-white text-xl font-bold';
+            mask.innerText = '正在製作 PDF 中... 請稍候';
+            document.body.appendChild(mask);
+            for(let i=0; i<pages.length; i++) {
+                if(i > 0) doc.addPage();
+                const canvas = await html2canvas(pages[i], { scale: 2, useCORS: true });
+                doc.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, 210, 297);
+            }
+            doc.save(`認知復健教案_${Date.now()}.pdf`);
+            document.body.removeChild(mask);
+        }
+
+        syncSudokuPerPage();
+        refreshData();
+    </script>
+</body>
+</html>
